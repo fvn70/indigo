@@ -7,15 +7,8 @@ data class Card(val rank: String, val suit: String) {
         return "$rank$suit"
     }
 
-    override fun equals(other: Any?): Boolean {
-        when (other) {
-            is Card -> {
-                return this.rank == other.rank ||
-                        this.suit == other.suit
-            }
-            else -> return false
-        }
-    }
+    fun like(other: Card) =
+        this.rank == other.rank || this.suit == other.suit
 }
 
 class Player(val name: String) {
@@ -31,10 +24,51 @@ class Player(val name: String) {
         score = winCards.filter { it.rank in "A, 10, J, Q, K" }.size
     }
 
-    fun turn(): Card {
-        var idx = cards.lastIndex
+    // Choose best card from cards to win the top
+    fun choose(top: Card?): Int {
+//        1) If there is only one card in hand, put it on the table
+        if (cards.size == 1) {
+            return 0
+        }
+        val candCards = when (top) {
+            null -> cards
+            else -> cards.filter { it.rank == top.rank || it.suit == top.suit }
+        }
+//        2) If there is only one candidate card, put it on the table
+        if (candCards.size == 1) {
+            return cards.indexOf(candCards[0])
+        }
+//        3-4) If there are no cards on the table or no candidate cards
+        if (top == null || candCards.isEmpty()) {
+            val bySuit = cards.groupBy { it.suit }.filter { it.value.size > 1 }
+            val byRank = cards.groupBy { it.rank }.filter { it.value.size > 1 }
+            val card = when {
+                bySuit.size > 0 -> bySuit.values.shuffled()[0].shuffled()[0]
+                byRank.size > 0 -> byRank.values.shuffled()[0].shuffled()[0]
+                else -> cards.shuffled()[0]
+            }
+            return cards.indexOf(card)
+        }
+//        5) If there are two or more candidate cards
+        if (candCards.size > 0) {
+            val bySuit = candCards.groupBy { it.suit }.filter { it.value.size > 1 }
+            val byRank = candCards.filter { it.rank == top.rank }
+            val card = when {
+                bySuit.size > 0 -> bySuit.values.shuffled()[0].shuffled()[0]
+                byRank.size > 0 -> byRank.shuffled()[0]
+                else -> candCards.shuffled()[0]
+            }
+            return cards.indexOf(card)
+        }
+        return 0
+    }
+
+    fun turn(top: Card?): Card {
+        var idx = 0
         if (name == "Computer") {
-            println("Computer plays ${cards.last()}")
+            println(cards.joinToString(" "))
+            idx = choose(top)
+            println("Computer plays ${cards[idx]}")
         } else {
             val s = cards.mapIndexed { i, card ->  "${i + 1})$card" }
             println("Cards in hand: ${s.joinToString(" ")}")
@@ -128,14 +162,17 @@ class Deck {
         if (p.cards.size == 0) {
             return false
         }
-        val card = p.turn()
+
+        val top = if (table.isEmpty()) null else table.last()
+        val card = p.turn(top)
+
         if (card.rank == "E") {
             return false
         }
         table.add(card)
         val idx = table.size - 2
 
-        if (idx >= 0 && card == table[idx]) {
+        if (idx >= 0 && card.like(table[idx])) {
             p.score += table.filter { it.rank in "A, 10, J, Q, K" }.size
             p.winCards.addAll(table)
             lastWin = players.indexOf(p)
